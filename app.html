@@ -123,7 +123,7 @@ function run(){var s=D.value;if(s.trim()===''){out.innerHTML='';return}var r=Pat
  var o=O.value;
  if(o!==''&&r.files.length){if(r.files.length>1)h+='<div class="n info">Several files in the diff: trying only the first one ('+esc(r.files[0].old)+') against the file you pasted.</div>';
   var a=PatchWhy.apply(o,r.files[0]);
-  h+='<div class="card"><h3>'+(a.ok?'Applies cleanly':'Does not apply')+'</h3>'+a.results.map(function(x){return'<div class="n '+(x.ok?'good':'err')+'">Hunk '+x.hunk+': '+(x.ok?(x.offset?'applied, shifted by '+x.offset+' line'+(Math.abs(x.offset)===1?'':'s')+' from where the header says':'applied at the expected line'):esc(x.reason))+'</div>'}).join('');
+  var bad=r.files[0].hunks.some(function(x){return x.countError});h+='<div class="card"><h3>'+(bad?(a.ok?'Would apply if the hunk counts were fixed':'Does not apply, even ignoring the bad counts'):(a.ok?'Applies cleanly':'Does not apply'))+'</h3>'+(bad?'<div class="n warn">GNU patch and git apply refuse this diff before trying, because of the count error above. This is only what the lines would do.</div>':'')+a.results.map(function(x){return'<div class="n '+(x.ok?'good':'err')+'">Hunk '+x.hunk+': '+(x.ok?(x.offset?'applied, shifted by '+x.offset+' line'+(Math.abs(x.offset)===1?'':'s')+' from where the header says':'applied at the expected line'):esc(x.reason))+'</div>'}).join('');
   if(a.ok)h+='<div class="m" style="margin-top:8px">Result:</div><pre>'+esc(a.text)+'</pre>';else h+='<div class="m" style="margin-top:8px">GNU patch would stop here too (strict context, no fuzz).</div>';
   h+='</div>'}
  out.innerHTML=h}
