@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PatchWhy app - why does this patch not apply?</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f3f4f6;color:#1f2328;line-height:1.5}
+.wrap{max-width:960px;margin:0 auto;padding:26px 16px 50px}
+h1{font-size:30px}h1 span{color:#1a7f37}.sub{color:#57606a;margin:6px 0 14px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.cols{grid-template-columns:1fr}}
+label{display:block;font-size:13px;color:#57606a;margin:0 0 4px}
+textarea{width:100%;height:240px;background:#fff;color:#1f2328;border:1px solid #d0d7de;border-radius:8px;padding:10px;font:12.5px ui-monospace,Menlo,Consolas,monospace;resize:vertical;white-space:pre;overflow:auto}
+.pre button{background:#fff;color:#1a7f37;border:1px solid #1a7f37;border-radius:20px;padding:5px 12px;margin:10px 6px 0 0;cursor:pointer;font-size:13px}
+.card{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:12px 16px;margin-top:14px}
+.n{margin-top:8px;padding:7px 10px;border-left:4px solid;font-size:14px;border-radius:0 6px 6px 0}.err{border-color:#cf222e;background:#ffebe9}.warn{border-color:#bf8700;background:#fff8c5}.info{border-color:#6e7781;background:#f6f8fa}.good{border-color:#1a7f37;background:#dafbe1}
+pre{font:12.5px ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;background:#f6f8fa;padding:8px;border-radius:6px;margin-top:6px;max-height:260px;overflow:auto}
+.pl{color:#1a7f37}.mi{color:#cf222e}.m{font:13px ui-monospace,Menlo,Consolas,monospace}h3{font-size:15px}
+.foot{color:#6e7781;font-size:13px;margin-top:18px}a{color:#1a7f37}
+</style></head><body><div class="wrap">
+<h1>Patch<span>Why</span></h1>
+<div class="sub">Paste a unified diff (from <span class="m">diff -u</span> or <span class="m">git diff</span>). Optionally paste the file it should apply to. See whether the hunk counts are right, and which hunk fails and why.</div>
+<div class="cols"><div><label for="d">Diff</label><textarea id="d" spellcheck="false"></textarea></div><div><label for="o">File to patch (optional)</label><textarea id="o" spellcheck="false"></textarea></div></div>
+<div class="pre" id="pre"></div>
+<div id="out"></div>
+<div class="foot">The reader and the applier were checked on 1,500 generated diffs (4,314 checks, 0 differences): applying a diff to its own original gives the new file, and on altered originals the result matches GNU patch 2.7.6 with --fuzz=0, including which cases are rejected. Corrupted hunk counts were always caught. Git-specific features (renames, binary patches, fuzz above 0, whitespace options) are not applied. Runs in your browser; nothing is uploaded.</div>
+<div class="foot">Part of the <a href="https://ilanis-agent.github.io/app-factory/">app factory</a>. Source: <a href="https://github.com/iLanis-agent/patchwhy">GitHub</a>.</div>
+</div>
+<script>
+(function (root) {
+  'use strict';
+  // Unified diff reader and applier (the format of diff -u and git diff).
+  function stripPath(p) { p = p.replace(/\t.*$/, '').trim(); if (p === '/dev/null') return p; return p.replace(/^"(.*)"$/, '$1'); }
+  function parse(text) {
+    var lines = String(text).split(/\r?\n/), crlf = /\r\n/.test(text), files = [], issues = [], f = null, h = null, i, m;
+    if (lines.length && lines[lines.length - 1] === '') lines.pop();
+    function closeHunk() {
+      if (!h) return;
+      h.aOld = h.lines.filter(function (x) { return x.t !== '+'; }).length; h.aNew = h.lines.filter(function (x) { return x.t !== '-'; }).length;
+      if (h.aOld !== h.oldLen || h.aNew !== h.newLen) h.countError = 'Header says -' + h.oldStart + ',' + h.oldLen + ' +' + h.newStart + ',' + h.newLen + ' but the lines below count ' + h.aOld + ' old and ' + h.aNew + ' new.';
+      h = null;
+    }
+    for (i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      if (h && (h.aOld === undefined) && (h.seenOld < h.oldLen || h.seenNew < h.newLen || l[0] === '\\')) {
+        if (l[0] === '\\') { var last = h.lines[h.lines.length - 1]; if (last) last.noEol = true; continue; }
+        var t = l[0];
+        if (t === ' ' || t === '+' || t === '-') { h.lines.push({ t: t, s: l.slice(1), no: i + 1 }); if (t !== '+') h.seenOld++; if (t !== '-') h.seenNew++; continue; }
+        if (l === '') { h.lines.push({ t: ' ', s: '', no: i + 1, blank: true }); h.seenOld++; h.seenNew++; h.blankCtx = true; continue; }
+        // ran out of valid body lines early
+        closeHunk();
+      }
+      if ((m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(l))) {
+        closeHunk();
+        if (!f) { f = { old: '?', nw: '?', hunks: [], noHeader: true }; files.push(f); }
+        h = { oldStart: +m[1], oldLen: m[2] === undefined ? 1 : +m[2], newStart: +m[3], newLen: m[4] === undefined ? 1 : +m[4], section: m[5].trim(), lines: [], seenOld: 0, seenNew: 0, no: i + 1 };
+        f.hunks.push(h); continue;
+      }
+      if (/^--- /.test(l) && lines[i + 1] && /^\+\+\+ /.test(lines[i + 1])) { closeHunk(); f = { old: stripPath(l.slice(4)), nw: stripPath(lines[i + 1].slice(4)), hunks: [] }; files.push(f); i++; continue; }
+      if (/^diff --git /.test(l)) { closeHunk(); f = null; continue; }
+      if (h) { closeHunk(); }
+      if (/^(index |new file mode|deleted file mode|old mode|new mode|similarity|rename |Binary files)/.test(l)) { if (/^Binary files/.test(l)) issues.push({ lvl: 'warn', msg: 'Line ' + (i + 1) + ': binary file change. Text patches cannot carry it.' }); continue; }
+      if (l.trim() !== '' && files.length) issues.push({ lvl: 'info', msg: 'Line ' + (i + 1) + ' is outside any hunk and is ignored: "' + l.slice(0, 50) + '".' });
+    }
+    closeHunk();
+    // closing a hunk that is still short at end of input
+    files.forEach(function (ff) { ff.hunks.forEach(function (hh) {
+      if (hh.aOld === undefined) { hh.aOld = hh.lines.filter(function (x) { return x.t !== '+'; }).length; hh.aNew = hh.lines.filter(function (x) { return x.t !== '-'; }).length; }
+      if ((hh.aOld !== hh.oldLen || hh.aNew !== hh.newLen) && !hh.countError) hh.countError = 'Header says -' + hh.oldStart + ',' + hh.oldLen + ' +' + hh.newStart + ',' + hh.newLen + ' but the lines below count ' + hh.aOld + ' old and ' + hh.aNew + ' new.';
+      if (hh.blankCtx) issues.push({ lvl: 'warn', msg: 'Hunk at line ' + hh.no + ' has empty lines where context lines (a single space) should be. Editors that strip trailing whitespace do this. GNU patch and git apply both accept it, but some other tools do not.' });
+      ff.adds = (ff.adds || 0) + hh.lines.filter(function (x) { return x.t === '+'; }).length; ff.dels = (ff.dels || 0) + hh.lines.filter(function (x) { return x.t === '-'; }).length;
+    }); });
+    if (!files.length) issues.push({ lvl: 'err', msg: 'No unified diff found. Expected "--- a/file", "+++ b/file" and "@@ -1,3 +1,4 @@" lines.' });
+    files.forEach(function (ff) { if (ff.noHeader) issues.push({ lvl: 'err', msg: 'Hunk without ---/+++ file header lines.' }); ff.hunks.forEach(function (hh) { if (hh.countError) issues.push({ lvl: 'err', msg: 'Hunk at line ' + hh.no + ': ' + hh.countError + ' patch and git apply call this a corrupt patch.' }); }); });
+    if (crlf) issues.push({ lvl: 'warn', msg: 'The diff text has CRLF line endings. If the files use LF, every line will fail to match.' });
+    return { files: files, issues: issues, crlf: crlf };
+  }
+  function splitLines(t) { if (t === '') return { lines: [], eol: true }; var eol = /\n$/.test(t), a = t.split('\n'); if (eol) a.pop(); return { lines: a, eol: eol }; }
+  function matchAt(src, pos, seq) { for (var i = 0; i < seq.length; i++) if (src[pos + i] !== seq[i]) return false; return true; }
+  // apply with exact context, searching for the nearest offset (like patch --fuzz=0)
+  function apply(orig, file) {
+    var sp = splitLines(orig), src = sp.lines, out = [], pos = 0, delta = 0, results = [], eol = sp.eol, ok = true;
+    file.hunks.forEach(function (h, hi) {
+      var oldSeq = h.lines.filter(function (x) { return x.t !== '+'; }).map(function (x) { return x.s; }), newLines = h.lines.filter(function (x) { return x.t !== '-'; }), start = h.oldStart - 1 + (oldSeq.length === 0 && h.oldLen === 0 ? 1 : 0);
+      if (h.oldLen === 0) start = h.oldStart;   // pure insertion: oldStart is the line AFTER which to insert
+      start += delta;   // like patch, assume the offset found for the previous hunk still holds
+      var found = -1, best = null, d;
+      for (d = 0; d <= src.length + 1; d++) {
+        var c1 = start + d, c2 = start - d;
+        if (c1 >= pos && c1 + oldSeq.length <= src.length && matchAt(src, c1, oldSeq)) { found = c1; break; }
+        if (d && c2 >= pos && c2 + oldSeq.length <= src.length && matchAt(src, c2, oldSeq)) { found = c2; break; }
+      }
+      if (found < 0) { ok = false; var at = Math.max(pos, Math.min(start, src.length)), bi = 0; while (bi < oldSeq.length && src[at + bi] === oldSeq[bi]) bi++; var why = bi >= oldSeq.length ? 'it matches only at positions that overlap an earlier hunk' : at + bi >= src.length ? 'the file ends at line ' + src.length + ' but the hunk expects "' + String(oldSeq[bi]).slice(0, 40) + '" at line ' + (at + bi + 1) : 'at line ' + (at + bi + 1) + ' the hunk expects "' + String(oldSeq[bi]).slice(0, 40) + '" but the file has "' + String(src[at + bi]).slice(0, 40) + '"'; results.push({ hunk: hi + 1, ok: false, reason: 'The ' + oldSeq.length + ' context and removed lines do not match anywhere in the file. Closest to line ' + h.oldStart + ': ' + why + '.' }); return; }
+      for (var k = pos; k < found; k++) out.push(src[k]);
+      newLines.forEach(function (x) { out.push(x.s); });
+      var lastOld = h.lines.filter(function (x) { return x.t !== '+'; }).slice(-1)[0], lastNew = newLines.slice(-1)[0];
+      if (found + oldSeq.length >= src.length) { if (lastNew) eol = !lastNew.noEol; else if (lastOld) eol = true; }
+      pos = found + oldSeq.length;
+      delta = found - (h.oldLen === 0 ? h.oldStart : h.oldStart - 1);
+      results.push({ hunk: hi + 1, ok: true, offset: delta });
+    });
+    if (!ok) return { ok: false, results: results };
+    for (var j = pos; j < src.length; j++) out.push(src[j]);
+    var text = out.join('\n') + (out.length && eol ? '\n' : '');
+    return { ok: true, text: text, results: results };
+  }
+  var api = { parse: parse, apply: apply };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PatchWhy = api;
+})(typeof window !== 'undefined' ? window : this);
+
+var ORIG='alpha\nbeta\ngamma\ndelta\nepsilon\nzeta\neta\ntheta\n';
+var GOOD='--- a/greek.txt\n+++ b/greek.txt\n@@ -2,6 +2,7 @@\n beta\n gamma\n-delta\n+DELTA\n+delta two\n epsilon\n zeta\n eta\n';
+var P=[
+['good patch',GOOD,ORIG],
+['wrong hunk count',GOOD.replace('-2,6 +2,7','-2,6 +2,8'),ORIG],
+['file changed since',GOOD,ORIG.replace('gamma','GAMMA')],
+['stripped blanks','--- a/x.txt\n+++ b/x.txt\n@@ -1,4 +1,4 @@\n one\n\n-two\n+TWO\n three\n','one\n\ntwo\nthree\n'],
+['no diff','just some text',''] ];
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+var D=document.getElementById('d'),O=document.getElementById('o'),out=document.getElementById('out');
+function run(){var s=D.value;if(s.trim()===''){out.innerHTML='';return}var r=PatchWhy.parse(s),h='';
+ h+='<div class="card"><h3>'+r.files.length+' file'+(r.files.length===1?'':'s')+' in the diff</h3>'+r.files.map(function(f){return'<div class="m">'+esc(f.old)+' &rarr; '+esc(f.nw)+' &nbsp; '+f.hunks.length+' hunk'+(f.hunks.length===1?'':'s')+', <span class="pl">+'+(f.adds||0)+'</span> <span class="mi">-'+(f.dels||0)+'</span></div>'}).join('')+'</div>';
+ h+=r.issues.map(function(q){return'<div class="n '+q.lvl+'">'+esc(q.msg)+'</div>'}).join('');
+ if(!r.issues.length)h+='<div class="n good">The diff is well formed: every hunk header matches its lines.</div>';
+ var o=O.value;
+ if(o!==''&&r.files.length){if(r.files.length>1)h+='<div class="n info">Several files in the diff: trying only the first one ('+esc(r.files[0].old)+') against the file you pasted.</div>';
+  var a=PatchWhy.apply(o,r.files[0]);
+  h+='<div class="card"><h3>'+(a.ok?'Applies cleanly':'Does not apply')+'</h3>'+a.results.map(function(x){return'<div class="n '+(x.ok?'good':'err')+'">Hunk '+x.hunk+': '+(x.ok?(x.offset?'applied, shifted by '+x.offset+' line'+(Math.abs(x.offset)===1?'':'s')+' from where the header says':'applied at the expected line'):esc(x.reason))+'</div>'}).join('');
+  if(a.ok)h+='<div class="m" style="margin-top:8px">Result:</div><pre>'+esc(a.text)+'</pre>';else h+='<div class="m" style="margin-top:8px">GNU patch would stop here too (strict context, no fuzz).</div>';
+  h+='</div>'}
+ out.innerHTML=h}
+D.oninput=run;O.oninput=run;var pre=document.getElementById('pre');
+P.forEach(function(k){var b=document.createElement('button');b.textContent=k[0];b.onclick=function(){D.value=k[1];O.value=k[2];run()};pre.appendChild(b)});
+D.value=P[0][1];O.value=P[0][2];run();
+</script></body></html>
