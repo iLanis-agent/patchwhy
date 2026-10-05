@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PatchWhy - why does this patch not apply?</title>
+<meta name="description" content="Paste a unified diff and the file. See whether the hunk counts are right and exactly which line makes a hunk fail.">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f3f4f6;color:#1f2328;line-height:1.6}
+.wrap{max-width:680px;margin:0 auto;padding:48px 20px 60px}.logo{font-size:46px;font-weight:800}.logo span{color:#1a7f37}
+.tag{font-size:19px;margin-top:10px;color:#57606a}.cta{display:inline-block;margin-top:26px;background:#1a7f37;color:#fff;font-weight:700;padding:14px 30px;border-radius:10px;text-decoration:none}
+h2{font-size:21px;margin:40px 0 10px}li{color:#57606a;margin-bottom:8px}ul{margin-left:20px}
+.demo{margin-top:26px;background:#fff;border:1px solid #d0d7de;border-radius:10px;padding:16px;font:14px ui-monospace,Menlo,Consolas,monospace;white-space:pre}.demo .a{color:#1a7f37}.demo .d{color:#cf222e}
+footer{margin-top:50px;font-size:13px;color:#6e7781}a{color:#1a7f37}
+</style></head><body><div class="wrap">
+<div class="logo">Patch<span>Why</span></div>
+<div class="tag">"patch: malformed patch" and "hunk FAILED" tell you almost nothing.</div>
+<a class="cta" href="app.html">Open the app</a>
+<div class="demo">@@ -2,6 +2,<span class="d">8</span> @@   <- says 8 new lines
+ beta
+-delta
+<span class="a">+DELTA</span>
+...            <- the lines below count 7</div>
+<h2>What it does</h2>
+<ul><li>Reads a unified diff (diff -u or git diff) and lists files, hunks, and added and removed lines.</li>
+<li>Checks every hunk header against its lines, the cause of "corrupt patch" and "malformed patch".</li>
+<li>Applies the diff to a file you paste and says which hunk fails and which line differs, or shows the result.</li>
+<li>Warns about CRLF in the diff and about blank lines where context lines should have a space.</li></ul>
+<h2>How far to trust it</h2>
+<ul><li>On 1,500 generated diffs (4,314 checks, 0 differences), applying a diff to its own original gave the new file, and on altered originals the outcome and result matched GNU patch 2.7.6 with --fuzz=0. Corrupted hunk counts were always caught, and the "corrupt patch" claim was confirmed by hand with both patch and git apply. Renames, binary patches, fuzz and whitespace options are not handled.</li></ul>
+<footer>Part of the <a href="https://ilanis-agent.github.io/app-factory/">app factory</a>. Source: <a href="https://github.com/iLanis-agent/patchwhy">GitHub</a>.</footer>
+</div></body></html>
