@@ -1,0 +1,5 @@
+# PatchWhy
+Paste a unified diff and optionally the file to patch: hunk header count check, apply with strict context, which hunk and line fails. Static client-side app, open `app.html`.
+Sources: none fetched; behavior is checked against the real tools: GNU patch 2.7.6 and git (apply --check) run in the sandbox.
+Tests: `node test-engine.js` generates 1500 random files and edits, makes real `diff -U0/1/3/5`, then (a) applies to the original and expects the new file, (b) applies to a mutated original and compares success and result with `patch --fuzz=0`, (c) corrupts a hunk length and expects an error. 4314 checks, 0 discrepancies. Corrupt-count and blank-context behavior of both patch and git apply was also checked by hand.
+Limits: only the first file of a multi-file diff is applied; no fuzz; renames, mode changes, binary patches, `\ No newline` edge cases beyond the end-of-file case, and whitespace-ignoring options are not handled. Test files are short generated lines, not real source trees.
